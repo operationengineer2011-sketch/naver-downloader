@@ -44,13 +44,13 @@ class HighTechWebtoonDownloader:
         self.session_stats = {'images_downloaded':0,'images_skipped':0,'failed_downloads':0,'start_time':time.time()}
 
     async def fetch_url(self, client, url):
-        try:
-            resp = await client.get(url, headers=self.headers, timeout=15)
-            if resp.status_code == 200:
-                return resp.text
-        except Exception as e:
-            print(f"❌ Error fetching {url}: {e}")
-        return None
+       try:
+            async with client.get(url, headers=self.headers, timeout=15) as resp:
+                if resp.status == 200:
+                    return await resp.text()
+       except Exception as e:
+                print(f"✗ Error fetching {url}: {e}")
+       return None
 
     async def fetch_download_image(self, client, url, fp):
         file_path = Path(fp)
@@ -100,21 +100,31 @@ class HighTechWebtoonDownloader:
                 content = await self.fetch_url(client, url)
                 if content:
                     soup = BeautifulSoup(content, 'html.parser')
-                    div = soup.select_one('div.viewer_img')
-                    if div:
-                        img_tags = div.find_all('img')
-                        img_links = []
-                        for img in img_tags:
-                            if 'data-src' in img.attrs:
-                                img_links.append(img['data-src'])
-                            elif 'src' in img.attrs:
-                                img_links.append(img['src'])
-                        self.dl.extend(img_links)
-                        img_folder = Path(full_path) / str(cur)
-                        img_folder.mkdir(exist_ok=True)
-                        save_paths = [str(img_folder / f'{i}.jpg') for i in range(len(img_links))]
-                        self.sp.extend(save_paths)
-                        print(f"📄 Episode {cur}: {len(img_links)} images found")
+                    img_tags = soup.find_all('img')
+                    img_links = []
+                    for img in img_tags:
+                         if 'data-src' in img.attrs:
+                             img_links.append(img['data-src'])
+                         elif 'data-url' in img.attrs:
+                             img_links.append(img['data-url'])
+                         elif 'src' in img.attrs:
+                             img_links.append(img['src'])
+
+# فلترة صور الويب تون فقط
+                             img_links = [
+                                 url for url in img_links
+                                 if url.startswith('http') and 'webtoon' in url
+                             ]
+
+                             if not img_links:
+                                  print(f"⚠️ Episode {cur}: No images found (different layout)")
+                                  continue
+                             self.dl.extend(img_links)
+                             img_folder = Path(full_path) / str(cur)
+                             img_folder.mkdir(exist_ok=True)
+                             save_paths = [str(img_folder / f'{i}.jpg') for i in range(len(img_links))]
+                             self.sp.extend(save_paths)
+                             print(f"📄 Episode {cur}: {len(img_links)} images found")
                     else:
                         print(f"⚠️ No images found in episode {cur}")
                 else:
